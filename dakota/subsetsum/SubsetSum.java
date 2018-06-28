@@ -3,6 +3,14 @@ Conditional Recursive Combination Generator
 Author: Dakota Smith
 Date: 06/26/2018
 Version: 1.0
+
+Author: Alexander Miller
+Date: 06/27/2018
+Version: 1.1
+Version Update(s):
+- Architecture change from brute force to multi-threading
+- - High level permutations generated before any comparoter processing is done. Better to be unsorted for even core distribution
+- - - For instance, if the set is (3, 5, 1, 7, 6), then it would produce ({3}, {5}, {1}, {7}, {6}, {3, 5}, {3, 1}, ...)
 *****************************/
 
 package dakota.subsetsum;
@@ -16,13 +24,22 @@ import java.io.BufferedWriter;
 
 public class SubsetSum
 {
+	/**
+	* listOfWords - global list used in synchronized multi-threading calculations
+	*/
+	private static List<Subset> listOfSubsets = new ArrayList<Subset>();
+
+	/**
+	* list - a synchronized, thread-safe collection of threads for organized multi-threading
+	*/
+	private List<MyThread> list = Collections.synchronizedList(new ArrayList<MyThread>());
+
 	/*
 		The following two functions, partition and sort, are
 		a quicksort implementation grabbed from a google search,
 		modified to sort an array of subsets rather than integers.
 		https://www.geeksforgeeks.org/quick-sort/
 	*/
-	
 	public static int partition(ArrayList<Subset> arr, int low, int high)
     {
         int pivot = arr.get(high).sum; 
@@ -64,7 +81,6 @@ public class SubsetSum
 		combining its cost with the costs of the cheapest items
 		until the total goes over target
 	*/
-	
 	public static void calcMaxSubsetSizes(ArrayList<Item> values, int target) //values must be sorted low to high
 	{
 		for(int i = 0; i < values.size(); i++)
@@ -84,6 +100,113 @@ public class SubsetSum
 			}
 		}
 	}
+
+	/**
+	* generateBasePermutations
+	*
+	* Function which takes the full list of items from the text file and
+	* generates all possible unique permutations without accounting for anything other 
+	* than uniqueness.
+	*
+	* @param listOfItems - ArrayList<Item> containing all items found in the original text file
+	*/
+	public static ArrayList<SubSet> generateBasePermutations(ArrayList<Item> listOfItems)
+	{
+		// 1. create a hashset on a two dimensional list of items to gather true uniqueness across the board
+		//Set<List<Item>> strSet = new HashSet<List<Item>>();
+		
+		ArrayList<SubSet> returningList = new ArrayList<SubSet>();
+
+		// 2. TODO generate a list of unique by content lists of items.
+		//    example would be I have the following items:
+		//    - Item1: {title: "wow", cost: 1, maxSubsetSize: 1}
+		//    - Item2: {title: "wow2", cost: 1, maxSubsetSize: 1}
+		//    - Item3: {title: "wow3", cost: 1, maxSubsetSize: 1}
+		//    I want to see the following list:
+		//    (
+		//	 	[item1], 
+		//		[item2], 
+		//		[item3], 
+		//		[item1, item2], 
+		//		[item1, item3], 
+		//		[item2, item3] 
+		//	  )
+
+		// 3. Create subsets made from step 2
+
+		// 4. Return final subset list of all permutations
+		return returningList;
+	}
+
+	/**
+	* MyThread
+	*
+	* Thread-based class which computes the chuck of subsets assigned to it at run time
+	*/
+	class MyThread extends Thread 
+	{	 
+		/**
+		* threadList - A simple way to pass the variables from the main and save them to this thread momentarily.
+		*/
+		private ArrayList<Subset> threadList;
+
+		/**
+		* maxSize - Maximum subset size found in the pre-processing
+		*/
+		private int maxSize;
+
+		/**
+		* targetAmount - Amount specified as ceiling for total costs in all permuations
+		*/
+		private int targetAmount;
+
+		public MyThread(ArrayList<Subset> str, int max, int target) {
+	        this.setInfo(str);
+	        this.setMaxSize(max);
+	        this.setTargetAmount(target);
+	    }
+		
+		/*
+		 * 1. Synchronize the activity to prevent thread crashing
+		 * 2. Split string by white spaces
+		 * 3. While not exceeding the size of the list, check to see if its white space. If
+		 *    it isn't, check the array to see if it exists or if it needs to be added.  	 
+		 */
+	    public void run() 
+	    {
+	    	synchronized(listOfSubsets)
+	    	{
+	    		for(int i = 0; i < threadList.size(); i++)
+	    		{
+	    			listOfSubsets.addAll(recCombGen(maxSize,threadList));
+	    		}
+	    	}
+	    }
+
+		public ArrayList<Subset> getThreadList() {
+			return threadList;
+		}
+
+		public void setThreadList(ArrayList<Subset> threadList) {
+			this.threadList = threadList;
+		}
+
+		public int getMaxSize() {
+			return maxSize;
+		}
+
+		public void setMaxSize(int max) {
+			this.maxSize = max;
+		}
+
+		public int getTargetAmount() {
+			return targetAmount;
+		}
+
+		public void setTargetAmount(int target) {
+			this.targetAmount = max;
+		}
+	};	
 	
 	/*
 		recCombGen is a conditional recursive combination generator.
@@ -93,7 +216,6 @@ public class SubsetSum
 		recursive call, unless the combination would surpass the new
 		item's max subset size or exceed the target value.
 	*/
-	
 	public static ArrayList<Subset> recCombGen(int size, ArrayList<Item> values, int target)
 	{
 		ArrayList<Subset> subsets = new ArrayList<Subset>();
@@ -221,7 +343,6 @@ public class SubsetSum
 		sorts the results,
 		and prints them to file.
 	*/
-	
 	public static void main(String[] args)
 	{
 		//get target parameter and item data from input arguments
@@ -275,6 +396,15 @@ public class SubsetSum
 		
 		//begin execution, and output execution time measurements as well as number of results
 		long start = System.nanoTime();
+		
+		// TODO get contents of generateBasePermutations and perform the following:
+		for(Subset tempSubset : tempSubSetList)
+		{
+			MyThread m = new MyThread(comp, countOrder);
+			list.add(m);
+			m.start();
+		}
+		
 		subsets.addAll(recCombGen(maxSubsetSize,values,target));
 		long end = System.nanoTime();
 		
